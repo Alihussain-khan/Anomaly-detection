@@ -1,5 +1,9 @@
 /** Mirrors the backend WebSocket contract exactly - see backend/backend_guide.md. */
 
+/** Shared between ReplayService and AquaChart so the visible chart window
+ * can't drift out of sync between where it's collected and where it's drawn. */
+export const CHART_WINDOW_SIZE = 20;
+
 export type MetricKey = 'water_temp' | 'air_temp' | 'ph';
 
 export const METRIC_KEYS: MetricKey[] = ['water_temp', 'air_temp', 'ph'];

@@ -1,6 +1,6 @@
 """Replay window configuration.
 
-Playing all 40872 rows at 500ms each takes about 5 hours 40 minutes, far too
+Playing all 40872 rows at 1s each takes about 11 hours 20 minutes, far too
 long for a demo. By default the replay is restricted to a fixed window
 instead of the full table. Change these values, not the replay or pipeline
 logic, to move the window or resize the warm-up.
@@ -17,4 +17,4 @@ DEFAULT_END_ROW = 3399
 # faults; that's expected and the set is not filtered to remove them.
 CALIBRATION_ROW_COUNT = 1000
 
-TICK_SECONDS = 0.5
+TICK_SECONDS = 1.0

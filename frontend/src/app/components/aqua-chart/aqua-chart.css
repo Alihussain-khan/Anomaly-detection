@@ -1,6 +1,39 @@
 :host {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
   width: 100%;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  background: var(--color-tank-glass);
+  border-radius: 14px;
+  padding: 0.75rem 1rem 0.5rem;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.panel-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  flex: none;
+}
+
+.panel-label {
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-foam-muted);
 }
 
 .chart {
@@ -16,6 +49,14 @@
   stroke-linecap: round;
   vector-effect: non-scaling-stroke;
   transition: d 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.value-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  transition:
+    x 0.45s cubic-bezier(0.4, 0, 0.2, 1),
+    y 0.45s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .glow-dot {
@@ -44,6 +85,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .metric-line,
+  .value-label,
   .glow-dot {
     transition: none;
   }

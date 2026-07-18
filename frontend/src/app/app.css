@@ -61,6 +61,28 @@
   flex: 1;
 }
 
+.playback-controls {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.playback-btn {
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--color-foam);
+  background: var(--color-tank-glass);
+  border: none;
+  border-radius: 999px;
+  padding: 0.4rem 1rem;
+  cursor: pointer;
+}
+
+.playback-btn--sync {
+  background: var(--color-water-temp);
+  color: var(--color-abyss);
+}
+
 .idle-prompt {
   margin: auto;
   max-width: 32ch;

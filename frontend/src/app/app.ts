@@ -25,4 +25,15 @@ export class App {
   protected readonly replay = inject(ReplayService);
 
   protected readonly statusLabel = computed(() => STATUS_LABELS[this.replay.status()]);
+
+  /** The pause button doubles as an unsynced resume - jumping straight to the
+   * latest held reading either way, since there's no value in dramatizing
+   * catching up on a backlog point by point. */
+  protected togglePause(): void {
+    if (this.replay.paused()) {
+      this.replay.sync();
+    } else {
+      this.replay.pause();
+    }
+  }
 }

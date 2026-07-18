@@ -12,7 +12,7 @@ Scoring is done in per-refit-interval batches rather than one row at a
 time: a single-sample decision_function() call pays sklearn's per-call
 overhead (input validation, per-tree traversal) on every row, measured at
 roughly 1ms per estimator per call - at N_ESTIMATORS=200 that's ~180ms per
-row, more than the entire 500ms replay tick. Batching amortizes that
+row, a meaningful chunk of the 1s replay tick. Batching amortizes that
 overhead across many rows at once (measured at well under 1ms/row for a
 300-row batch) without changing which rows train which model version,
 since batches are still processed strictly in id order and each one only

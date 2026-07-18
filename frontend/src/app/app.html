@@ -13,7 +13,18 @@
     @if (replay.status() === 'idle') {
       <p class="idle-prompt">Open the control deck and start a replay to watch the tank.</p>
     } @else {
-      <app-aqua-chart [readings]="replay.window()" />
+      @if (replay.status() === 'connected' || replay.paused()) {
+        <div class="playback-controls">
+          <button type="button" class="playback-btn" (click)="togglePause()">
+            {{ replay.paused() ? 'Resume' : 'Pause' }}
+          </button>
+          @if (replay.paused()) {
+            <button type="button" class="playback-btn playback-btn--sync" (click)="replay.sync()">
+              Sync
+            </button>
+          }
+        </div>
+      }
 
       <app-numeric-readout [latest]="replay.latest()" [anomalyCount]="replay.anomalyCount()" />
 
@@ -21,6 +32,8 @@
         <h2 class="section-label">Anomaly log</h2>
         <app-anomaly-log [entries]="replay.anomalyLog()" />
       </section>
+
+      <app-aqua-chart [readings]="replay.window()" />
     }
   </main>
 </div>
