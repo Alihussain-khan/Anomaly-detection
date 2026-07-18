@@ -1,0 +1,55 @@
+:host {
+  display: block;
+  width: 100%;
+}
+
+.chart {
+  display: block;
+  width: 100%;
+  height: 220px;
+}
+
+.metric-line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+  transition: d 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glow-dot {
+  transition:
+    cx 0.45s cubic-bezier(0.4, 0, 0.2, 1),
+    cy 0.45s cubic-bezier(0.4, 0, 0.2, 1),
+    fill 0.2s ease;
+}
+
+.ripple {
+  fill: none;
+  stroke-width: 2;
+  animation: ripple-expand 1s ease-out forwards;
+}
+
+@keyframes ripple-expand {
+  from {
+    r: 3;
+    opacity: 0.85;
+  }
+  to {
+    r: 28;
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .metric-line,
+  .glow-dot {
+    transition: none;
+  }
+
+  .ripple {
+    animation: none;
+    opacity: 0;
+  }
+}

@@ -10,25 +10,38 @@ html {
   @include mat.theme(
     (
       color: (
-        primary: mat.$azure-palette,
+        theme-type: dark,
+        primary: mat.$cyan-palette,
         tertiary: mat.$blue-palette,
       ),
       typography: Roboto,
       density: 0,
     )
   );
+
+  // Material's generated dark-theme tones don't match the aquarium's own
+  // palette (frontend_guide.md: "themed to match the dark palette rather
+  // than left at Material's default look"), so the system variables that
+  // back every Material component are overridden with the exact tokens.
+  --mat-sys-background: #0a1f26;
+  --mat-sys-on-background: #e8f1f0;
+  --mat-sys-surface: #12303a;
+  --mat-sys-surface-container: #12303a;
+  --mat-sys-surface-container-high: #16394a;
+  --mat-sys-on-surface: #e8f1f0;
+  --mat-sys-on-surface-variant: #8fa9ac;
+  --mat-sys-primary: #2ed9c3;
+  --mat-sys-on-primary: #0a1f26;
+  --mat-sys-outline: #2ed9c355;
 }
 
 body {
-  // Default the application to a light color theme. This can be changed to
-  // `dark` to enable the dark color theme, or to `light dark` to defer to the
-  // user's system settings.
-  color-scheme: light;
+  color-scheme: dark;
 
   // Set a default background, font and text colors for the application using
   // Angular Material's system-level CSS variables. Learn more about these
   // variables at https://material.angular.dev/guide/system-variables
-  background-color: var(--mat-sys-surface);
+  background-color: var(--mat-sys-background);
   color: var(--mat-sys-on-surface);
   font: var(--mat-sys-body-medium);
 

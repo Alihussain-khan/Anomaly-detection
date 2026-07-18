@@ -42,6 +42,14 @@ backend/
 
 Exact file names are a suggestion, keep whatever structure the existing detection code already uses if it does not match this.
 
+## Demo mode
+
+Playing all 40872 rows at 500 milliseconds per row takes about 5 hours and 40 minutes, far too long for a demo. Add a configurable start row and end row for replay, defaulting to a 1000 row window, rows 2400 through 3399 by id. At 500 milliseconds per row that is about 8 minutes and 20 seconds. This specific window was chosen because it contains 27 occurrences of the water_temp equal to negative 127 fault, spread fairly evenly across the whole window, rather than clustered in one place, so the demo shows detection working repeatedly rather than once.
+
+The Isolation Forest calibration step described below still needs real data to train on before the demo window starts. Use rows 1400 through 2399, the 1000 rows immediately before the demo window, as the calibration set. Train on those rows quietly, sending nothing to the client, then begin the visible replay at row 2400 with the model already warmed up. Note that 5 of those 1000 calibration rows also happen to be water_temp negative 127 faults, so the calibration data is not perfectly clean, this is expected and fine, do not go filtering the calibration set to remove them.
+
+Keep the start row, end row, and calibration row count as configuration values rather than hard coded numbers buried in the replay logic, so the window can be changed later without touching core code.
+
 ## Detection model warm up
 
 Isolation Forest needs data to train on before it can usefully flag outliers. Since this is historical data being replayed rather than a genuinely live unknown feed, use this approach unless there is a strong reason to do otherwise:

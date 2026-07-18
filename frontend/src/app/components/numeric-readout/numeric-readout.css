@@ -1,0 +1,53 @@
+:host {
+  display: block;
+}
+
+.readout {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2rem;
+}
+
+.metric {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.value {
+  font-family: var(--font-mono);
+  font-size: 1.5rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  transition: color 0.2s ease;
+}
+
+.label {
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  color: var(--color-foam-muted);
+  letter-spacing: 0.02em;
+}
+
+.anomalous .value {
+  color: var(--color-anomaly-amber);
+}
+
+.anomaly-count .value {
+  color: var(--color-foam-muted);
+}
+
+.anomaly-count.active .value {
+  color: var(--color-anomaly-amber);
+}
+
+@media (max-width: 480px) {
+  .readout {
+    gap: 1.1rem;
+  }
+
+  .value {
+    font-size: 1.15rem;
+  }
+}

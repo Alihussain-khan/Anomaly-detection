@@ -1,0 +1,36 @@
+<div class="control-deck">
+  <button
+    mat-icon-button
+    class="toggle"
+    type="button"
+    (click)="toggle()"
+    [attr.aria-expanded]="expanded()"
+    aria-label="Toggle control deck"
+  >
+    <mat-icon>{{ expanded() ? 'close' : 'tune' }}</mat-icon>
+  </button>
+
+  @if (expanded()) {
+    <div class="panel">
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Start row</mat-label>
+        <input matInput type="number" [(ngModel)]="startRow" min="1" />
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>End row</mat-label>
+        <input matInput type="number" [(ngModel)]="endRow" min="1" />
+      </mat-form-field>
+
+      <button
+        mat-flat-button
+        color="primary"
+        type="button"
+        [disabled]="replay.status() === 'connecting' || replay.status() === 'connected'"
+        (click)="startReplay()"
+      >
+        Start replay
+      </button>
+    </div>
+  }
+</div>

@@ -1,3 +1,37 @@
 /* You can add global styles to this file, and also import other style files */
 
 @import 'tailwindcss';
+
+:root {
+  color-scheme: dark;
+
+  /* Deep tank at night - see frontend/frontend_guide.md design tokens */
+  --color-abyss: #0a1f26;
+  --color-tank-glass: #12303a;
+  --color-water-temp: #2ed9c3;
+  --color-air-temp: #8fa9ac;
+  --color-ph: #4a7fa7;
+  --color-anomaly-amber: #ff9f4a;
+  --color-foam: #e8f1f0;
+  --color-foam-muted: rgba(232, 241, 240, 0.6);
+
+  --font-display: 'Space Grotesk', 'General Sans', sans-serif;
+  --font-mono: 'JetBrains Mono', 'IBM Plex Mono', monospace;
+  --font-body: 'Inter', 'Manrope', sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--color-abyss);
+  color: var(--color-foam);
+  font-family: var(--font-body);
+}

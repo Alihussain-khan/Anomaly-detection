@@ -1,0 +1,44 @@
+:host {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  z-index: 10;
+}
+
+.control-deck {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+
+.toggle {
+  background: var(--color-tank-glass);
+  color: var(--color-foam);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 1rem;
+  background: var(--color-tank-glass);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  min-width: 200px;
+}
+
+.panel mat-form-field {
+  width: 100%;
+}
+
+@media (max-width: 480px) {
+  :host {
+    top: 0.5rem;
+    right: 0.5rem;
+  }
+
+  .panel {
+    min-width: 160px;
+  }
+}

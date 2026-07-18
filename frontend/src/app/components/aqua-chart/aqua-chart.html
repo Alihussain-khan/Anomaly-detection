@@ -1,0 +1,50 @@
+<svg
+  class="chart"
+  [attr.viewBox]="viewBox"
+  preserveAspectRatio="none"
+  role="img"
+  aria-label="Live water temperature, air temperature and pH readings"
+>
+  <defs>
+    <filter id="aqua-glow" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="3" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+
+  @for (metric of metrics; track metric.key) {
+    <path
+      class="metric-line"
+      [attr.d]="pathFor(metric)"
+      [style.d]="cssPathFor(metric)"
+      [attr.stroke]="colorFor(metric)"
+    />
+
+    @let tip = tipFor(metric);
+    @if (tip) {
+      <circle
+        class="glow-dot"
+        filter="url(#aqua-glow)"
+        r="4"
+        [attr.cx]="tip.x"
+        [attr.cy]="tip.y"
+        [style.cx.px]="tip.x"
+        [style.cy.px]="tip.y"
+        [attr.fill]="tipColorFor(metric)"
+      />
+    }
+  }
+
+  @for (ripple of ripples(); track ripple.id) {
+    <circle
+      class="ripple"
+      [attr.cx]="ripple.cx"
+      [attr.cy]="ripple.cy"
+      [attr.stroke]="colorForKey(ripple.metric)"
+      (animationend)="removeRipple(ripple.id)"
+    />
+  }
+</svg>
