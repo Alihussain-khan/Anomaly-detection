@@ -3,7 +3,9 @@
 These are sanity bounds on what the physical quantity can plausibly be
 (water is liquid, pH is 0-14), not bounds tuned to this tank's observed
 operating range. Anything wildly outside them is impossible, regardless of
-what specific fault produced it.
+what specific fault produced it - this is the sensor-fault gate: rows that
+fail this check are broken readings, not anomalies, and never reach the
+deviation or Isolation Forest detectors (see pipeline.py).
 """
 
 BOUNDS = {
@@ -13,7 +15,7 @@ BOUNDS = {
 }
 
 
-def check_thresholds(row: dict) -> tuple[bool, str | None]:
+def check_sensor_fault(row: dict) -> tuple[bool, str | None]:
     violations = []
     for field, (low, high) in BOUNDS.items():
         value = row[field]

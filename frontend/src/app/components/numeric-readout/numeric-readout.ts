@@ -1,6 +1,13 @@
 import { Component, input } from '@angular/core';
 
-import { MetricKey, Reading, anomalyMetrics, isAnomalous } from '../../models/reading.model';
+import {
+  MetricKey,
+  Reading,
+  anomalyMetrics,
+  isAnomalous,
+  isSensorFault,
+  sensorFaultMetrics,
+} from '../../models/reading.model';
 
 interface MetricDisplay {
   key: MetricKey;
@@ -24,6 +31,7 @@ const METRIC_DISPLAYS: MetricDisplay[] = [
 export class NumericReadout {
   readonly latest = input<Reading | null>(null);
   readonly anomalyCount = input(0);
+  readonly sensorFaultCount = input(0);
 
   protected readonly metrics = METRIC_DISPLAYS;
 
@@ -35,5 +43,10 @@ export class NumericReadout {
   protected isAnomalousFor(metric: MetricDisplay): boolean {
     const reading = this.latest();
     return !!reading && isAnomalous(reading) && anomalyMetrics(reading).includes(metric.key);
+  }
+
+  protected isFaultFor(metric: MetricDisplay): boolean {
+    const reading = this.latest();
+    return !!reading && isSensorFault(reading) && sensorFaultMetrics(reading).includes(metric.key);
   }
 }

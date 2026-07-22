@@ -32,12 +32,15 @@ async def ws_replay(
 
     total_readings = 0
     total_anomalies = 0
+    total_sensor_faults = 0
 
     try:
         async for row, result in paced(zip(demo_rows, results)):
             total_readings += 1
             if result["any_anomaly"]:
                 total_anomalies += 1
+            if result["sensor_fault"]:
+                total_sensor_faults += 1
 
             await websocket.send_json(
                 {
@@ -48,6 +51,8 @@ async def ws_replay(
                     "air_temp": row["air_temp"],
                     "ph": row["ph"],
                     "timestamp": row["timestamp"],
+                    "sensor_fault": result["sensor_fault"],
+                    "sensor_fault_detail": result["sensor_fault_detail"],
                     "anomalies": result["anomalies"],
                 }
             )
@@ -57,6 +62,7 @@ async def ws_replay(
                 "type": "done",
                 "total_readings": total_readings,
                 "total_anomalies_flagged": total_anomalies,
+                "total_sensor_faults": total_sensor_faults,
             }
         )
         await websocket.close()

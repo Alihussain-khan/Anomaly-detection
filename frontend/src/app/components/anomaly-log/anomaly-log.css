@@ -33,9 +33,17 @@
   color: var(--color-anomaly-amber);
 }
 
-.detectors {
+.entry--fault .detail {
+  color: var(--color-sensor-fault-red);
+}
+
+.reason {
   color: var(--color-foam-muted);
   font-style: italic;
+  /* Reason text can be a full sentence (e.g. isolation forest's field
+   * combination + score) - always give it its own line rather than
+   * fighting time/detail for space on the first row. */
+  flex-basis: 100%;
 }
 
 .empty-message {

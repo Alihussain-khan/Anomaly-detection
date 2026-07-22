@@ -1,8 +1,5 @@
-/** Mirrors the backend WebSocket contract exactly - see backend/backend_guide.md. */
-
-/** Shared between ReplayService and AquaChart so the visible chart window
- * can't drift out of sync between where it's collected and where it's drawn. */
-export const CHART_WINDOW_SIZE = 20;
+/** Mirrors the backend WebSocket contract exactly - see backend/backend_guide.md
+ * and backend/app/detection/pipeline.py. */
 
 export type MetricKey = 'water_temp' | 'air_temp' | 'ph';
 
@@ -14,13 +11,20 @@ export const METRIC_LABELS: Record<MetricKey, string> = {
   ph: 'ph',
 };
 
+/** Physically-plausible bounds per channel - mirrors backend/app/detection/thresholds.py
+ * BOUNDS exactly. Anything outside these is a sensor fault, not a real reading. Also used
+ * as the chart's fixed axis range (see aqua-chart.ts). */
+export const METRIC_BOUNDS: Record<MetricKey, readonly [number, number]> = {
+  water_temp: [0.0, 40.0],
+  air_temp: [-10.0, 50.0],
+  ph: [0.0, 14.0],
+};
+
+/** True anomaly signals only - a sensor fault is reported separately (see
+ * Reading.sensor_fault) and is never one of these. */
 export interface AnomalyFlags {
-  threshold: boolean;
-  threshold_detail: string | null;
-  trend: boolean;
-  trend_detail: string | null;
-  spike: boolean;
-  spike_detail: string | null;
+  deviation: boolean;
+  deviation_detail: string | null;
   isolation_forest: boolean;
   isolation_forest_detail: string | null;
 }
@@ -33,6 +37,8 @@ export interface Reading {
   air_temp: number;
   ph: number;
   timestamp: string;
+  sensor_fault: boolean;
+  sensor_fault_detail: string | null;
   anomalies: AnomalyFlags;
 }
 
@@ -40,16 +46,21 @@ export interface DoneMessage {
   type: 'done';
   total_readings: number;
   total_anomalies_flagged: number;
+  total_sensor_faults: number;
 }
 
 export type ReplayMessage = Reading | DoneMessage;
 
 export function isAnomalous(reading: Reading): boolean {
   const a = reading.anomalies;
-  return a.threshold || a.trend || a.spike || a.isolation_forest;
+  return a.deviation || a.isolation_forest;
 }
 
-const DETECTOR_KEYS = ['threshold', 'trend', 'spike', 'isolation_forest'] as const;
+export function isSensorFault(reading: Reading): boolean {
+  return reading.sensor_fault;
+}
+
+const DETECTOR_KEYS = ['deviation', 'isolation_forest'] as const;
 export type DetectorKey = (typeof DETECTOR_KEYS)[number];
 
 export function firedDetectors(reading: Reading): DetectorKey[] {
@@ -57,21 +68,17 @@ export function firedDetectors(reading: Reading): DetectorKey[] {
 }
 
 /**
- * The four anomaly flags aren't per-metric, only threshold/trend/spike carry
- * a free-text detail naming the field involved (e.g. "water_temp=-127.0
- * below minimum 0.0"). This recovers which line(s) a ripple/log entry should
- * attribute an anomaly to by matching metric names in those detail strings.
- * If only isolation_forest fired (a purely multivariate signal with no
- * single named field), all three metrics are implicated together, since the
- * anomaly is in how they combine, not in any one of them alone.
+ * Both deviation_detail and isolation_forest_detail carry a free-text detail
+ * naming the field(s) involved (e.g. "water_temp moved -2.82 vs the
+ * 2-minute rolling average...", or "water_temp and ph shifted together in
+ * an unusual combination..."). This recovers which line(s) a marker/log
+ * entry should attribute an anomaly to by matching metric names in those
+ * strings. Only if NEITHER detail names a field do all three metrics get
+ * implicated together, as a last-resort fallback.
  */
 export function anomalyMetrics(reading: Reading): MetricKey[] {
   const { anomalies } = reading;
-  const detailText = [
-    anomalies.threshold_detail,
-    anomalies.trend_detail,
-    anomalies.spike_detail,
-  ]
+  const detailText = [anomalies.deviation_detail, anomalies.isolation_forest_detail]
     .filter((detail): detail is string => detail !== null)
     .join(' ');
 
@@ -80,5 +87,12 @@ export function anomalyMetrics(reading: Reading): MetricKey[] {
     return named;
   }
 
-  return anomalies.isolation_forest ? [...METRIC_KEYS] : [];
+  return anomalies.deviation || anomalies.isolation_forest ? [...METRIC_KEYS] : [];
+}
+
+/** Same idea as anomalyMetrics, but for the sensor-fault detail string
+ * (e.g. "water_temp=-127.0 below minimum 0.0 (by 127.000)"). */
+export function sensorFaultMetrics(reading: Reading): MetricKey[] {
+  const detail = reading.sensor_fault_detail ?? '';
+  return METRIC_KEYS.filter((key) => detail.includes(key));
 }

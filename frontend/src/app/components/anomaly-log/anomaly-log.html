@@ -1,12 +1,12 @@
 <ul class="log">
   @if (rows().length === 0) {
-    <li class="empty-message">No anomalies yet.</li>
+    <li class="empty-message">{{ emptyMessage() }}</li>
   } @else {
     @for (row of rows(); track row.id) {
-      <li class="entry">
+      <li class="entry" [class.entry--fault]="kind() === 'fault'">
         <span class="time">{{ row.time }}</span>
         <span class="detail">{{ row.detail }}</span>
-        <span class="detectors">{{ row.detectors }}</span>
+        <span class="reason">{{ row.reason }}</span>
       </li>
     }
   }

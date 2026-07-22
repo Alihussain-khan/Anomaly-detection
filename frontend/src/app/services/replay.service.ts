@@ -1,17 +1,23 @@
 import { Injectable, computed, signal } from '@angular/core';
 
 import {
-  CHART_WINDOW_SIZE,
   DoneMessage,
   Reading,
   ReplayMessage,
   isAnomalous,
+  isSensorFault,
 } from '../models/reading.model';
 
 export type ConnectionStatus = 'idle' | 'connecting' | 'connected' | 'done' | 'error';
 
 /** The FastAPI backend from backend/, run separately via `uvicorn main:app --reload`. */
 const BACKEND_WS_URL = 'ws://localhost:8000/ws/replay';
+
+/** How much of the tank's own sensor time (not wall-clock arrival time) the
+ * chart keeps in view. Trimmed by `Reading.timestamp`, so this stays a fixed
+ * span of real sensor history regardless of how fast the backend paces
+ * delivery. */
+const CHART_WINDOW_MINUTES = 20;
 
 @Injectable({ providedIn: 'root' })
 export class ReplayService {
@@ -24,10 +30,12 @@ export class ReplayService {
   readonly latest = signal<Reading | null>(null);
   readonly window = signal<Reading[]>([]);
   readonly anomalyLog = signal<Reading[]>([]);
+  readonly sensorFaultLog = signal<Reading[]>([]);
   readonly done = signal<DoneMessage | null>(null);
   readonly paused = signal(false);
 
   readonly anomalyCount = computed(() => this.anomalyLog().length);
+  readonly sensorFaultCount = computed(() => this.sensorFaultLog().length);
 
   start(startRow?: number, endRow?: number): void {
     this.stop();
@@ -35,6 +43,7 @@ export class ReplayService {
     this.latest.set(null);
     this.window.set([]);
     this.anomalyLog.set([]);
+    this.sensorFaultLog.set([]);
     this.done.set(null);
     this.paused.set(false);
     this.heldReading = null;
@@ -59,6 +68,9 @@ export class ReplayService {
       if (message.type === 'reading') {
         if (isAnomalous(message)) {
           this.anomalyLog.update((log) => [message, ...log]);
+        }
+        if (isSensorFault(message)) {
+          this.sensorFaultLog.update((log) => [message, ...log]);
         }
         if (this.paused()) {
           this.heldReading = message;
@@ -87,7 +99,9 @@ export class ReplayService {
     this.latest.set(message);
     this.window.update((current) => {
       const next = [...current, message];
-      return next.length > CHART_WINDOW_SIZE ? next.slice(-CHART_WINDOW_SIZE) : next;
+      const cutoff = new Date(message.timestamp).getTime() - CHART_WINDOW_MINUTES * 60_000;
+      const trimStart = next.findIndex((reading) => new Date(reading.timestamp).getTime() >= cutoff);
+      return trimStart <= 0 ? next : next.slice(trimStart);
     });
   }
 

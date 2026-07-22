@@ -34,12 +34,21 @@
   color: var(--color-anomaly-amber);
 }
 
-.anomaly-count .value {
+.fault .value {
+  color: var(--color-sensor-fault-red);
+}
+
+.anomaly-count .value,
+.fault-count .value {
   color: var(--color-foam-muted);
 }
 
 .anomaly-count.active .value {
   color: var(--color-anomaly-amber);
+}
+
+.fault-count.active .value {
+  color: var(--color-sensor-fault-red);
 }
 
 @media (max-width: 480px) {

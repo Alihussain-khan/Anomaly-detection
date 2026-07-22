@@ -26,11 +26,24 @@
         </div>
       }
 
-      <app-numeric-readout [latest]="replay.latest()" [anomalyCount]="replay.anomalyCount()" />
+      <app-numeric-readout
+        [latest]="replay.latest()"
+        [anomalyCount]="replay.anomalyCount()"
+        [sensorFaultCount]="replay.sensorFaultCount()"
+      />
 
       <section class="log-panel">
         <h2 class="section-label">Anomaly log</h2>
-        <app-anomaly-log [entries]="replay.anomalyLog()" />
+        <app-anomaly-log [entries]="replay.anomalyLog()" kind="anomaly" emptyMessage="No anomalies yet." />
+      </section>
+
+      <section class="log-panel">
+        <h2 class="section-label">Sensor fault log</h2>
+        <app-anomaly-log
+          [entries]="replay.sensorFaultLog()"
+          kind="fault"
+          emptyMessage="No sensor faults yet."
+        />
       </section>
 
       <app-aqua-chart [readings]="replay.window()" />

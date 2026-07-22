@@ -1,276 +1,242 @@
-import { DestroyRef, Component, WritableSignal, effect, inject, input, signal } from '@angular/core';
+import { Component, DestroyRef, computed, effect, inject, input, signal } from '@angular/core';
+import { PlotlyModule } from 'angular-plotly.js';
 
 import {
-  CHART_WINDOW_SIZE,
   MetricKey,
   Reading,
   anomalyMetrics,
   isAnomalous,
+  sensorFaultMetrics,
 } from '../../models/reading.model';
 
 interface MetricConfig {
   key: MetricKey;
   label: string;
   color: string;
-  decimals: number;
-  /** Floor for the axis padding, so a window of near-identical readings
-   * doesn't collapse toward a zero-height range. */
-  minPadding: number;
 }
 
 const METRICS: readonly MetricConfig[] = [
-  { key: 'water_temp', label: 'water temp', color: '#2ED9C3', decimals: 1, minPadding: 0.3 },
-  { key: 'air_temp', label: 'air temp', color: '#8FA9AC', decimals: 1, minPadding: 0.3 },
-  { key: 'ph', label: 'ph', color: '#4A7FA7', decimals: 2, minPadding: 0.05 },
+  { key: 'water_temp', label: 'water temp', color: '#2ED9C3' },
+  { key: 'air_temp', label: 'air temp', color: '#8FA9AC' },
+  { key: 'ph', label: 'ph', color: '#4A7FA7' },
 ];
 
-const CHART_WIDTH = 600;
-const PANEL_HEIGHT = 220;
-const PADDING_TOP = 32;
-const PADDING_BOTTOM = 18;
-const RIPPLE_LIFETIME_MS = 1000;
+/** Fixed y-axis range per metric, sized to this tank's actual operating band
+ * (not the full physical-sensor-fault range in reading.model.ts's
+ * METRIC_BOUNDS - that's 0-40C/-10-50C/0-14pH, so wide that ordinary
+ * sub-degree noise and even a multi-degree anomaly would be indistinguishable
+ * from a flat line). Chosen from the real dataset's observed range with
+ * headroom: water_temp sits at 24.7-26.0C, air_temp 19.1-22.1C, ph 5.6-7.1
+ * (including the known single-sample glitch) - so each range below leaves
+ * room for real anomaly-sized excursions (the Task 2 magnitude thresholds:
+ * 1.0C / 0.5C / 0.35) without clipping, while keeping ordinary movement
+ * clearly visible. A sensor fault's true value (e.g. -127) is still clamped
+ * to whichever edge of this range it's nearest to, same idea as before, just
+ * against this tighter range instead of the physical one. */
+const DISPLAY_RANGE: Record<MetricKey, readonly [number, number]> = {
+  water_temp: [20, 30],
+  air_temp: [15, 25],
+  ph: [5, 7.5],
+};
 
-/** How much headroom to add above/below a metric's visible min/max before
- * scaling the axis to it, so the line doesn't hug the very top/bottom edge. */
-const RANGE_PADDING_FRACTION = 0.15;
+// Mirror styles.css's --color-anomaly-amber / --color-sensor-fault-red:
+// Plotly renders outside Angular's style pipeline, so these can't be read
+// from a CSS custom property at draw time.
+const ANOMALY_COLOR = '#FF9F4A';
+const FAULT_COLOR = '#FF5C5C';
+const GRID_COLOR = 'rgba(232, 241, 240, 0.12)';
+const TICK_COLOR = 'rgba(232, 241, 240, 0.6)';
 
-interface Point {
-  x: number;
-  y: number;
-  anomalous: boolean;
-  value: number;
-}
+const PANEL_HEIGHT_PX = 220;
 
-interface RippleInstance {
-  id: number;
-  metric: MetricKey;
-  cx: number;
-  cy: number;
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
+/** How often buffered readings are actually pushed into the Plotly traces -
+ * deliberately decoupled from how often the `readings` input itself updates,
+ * so the chart redraws at a steady, calm cadence even if the backend paces
+ * delivery faster than this. */
+const RENDER_INTERVAL_MS = 1500;
 
 @Component({
   selector: 'app-aqua-chart',
   standalone: true,
+  imports: [PlotlyModule],
   templateUrl: './aqua-chart.html',
   styleUrl: './aqua-chart.css',
 })
 export class AquaChart {
   readonly readings = input.required<Reading[]>();
 
-  protected readonly viewBox = `0 0 ${CHART_WIDTH} ${PANEL_HEIGHT}`;
   protected readonly metrics = METRICS;
+  protected readonly config = { displayModeBar: false, responsive: true };
+  protected readonly plotStyle = { width: '100%', height: `${PANEL_HEIGHT_PX}px` };
 
-  protected readonly reducedMotion = signal(
-    typeof window !== 'undefined' &&
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+  /** The slice of `readings` actually drawn right now - only replaced once
+   * every RENDER_INTERVAL_MS (plus immediately on the very first batch), see
+   * the constructor. */
+  private readonly rendered = signal<Reading[]>([]);
+  private hasRenderedFirstBatch = false;
+
+  private readonly dataByMetric = new Map(
+    METRICS.map((metric) => [metric.key, computed(() => this.buildData(metric))] as const),
   );
-
-  protected readonly ripples = signal<RippleInstance[]>([]);
-
-  /** Each metric's current axis range, held in state rather than recomputed
-   * every tick. Only replaced when an incoming non-anomalous value actually
-   * falls outside it (see the effect below), then the panel eases smoothly
-   * into the new range via the same CSS transition already used for point
-   * motion, instead of the axis visibly jittering on every single update. */
-  private readonly ranges = new Map<MetricKey, WritableSignal<readonly [number, number]>>(
-    METRICS.map((metric) => [metric.key, signal<readonly [number, number]>([0, 0])]),
+  private readonly layoutByMetric = new Map(
+    METRICS.map((metric) => [metric.key, computed(() => this.buildLayout(metric))] as const),
   );
-
-  /** x position for slot i, always relative to the fixed window size so the
-   * chart fills in from the left during the first few seconds rather than
-   * prematurely stretching a handful of points across the full width. */
-  private xFor(index: number): number {
-    return (index / (CHART_WINDOW_SIZE - 1)) * CHART_WIDTH;
-  }
-
-  private rangeFor(metric: MetricConfig): readonly [number, number] {
-    return this.ranges.get(metric.key)!();
-  }
-
-  private isAnomalousFor(metric: MetricConfig, reading: Reading): boolean {
-    return isAnomalous(reading) && anomalyMetrics(reading).includes(metric.key);
-  }
-
-  /** Normal readings plot proportionally within the current range, at full
-   * resolution. An anomalous reading never gets a proportional position at
-   * all, it pins to whichever edge of the range it breached (or the nearer
-   * edge, if the anomaly wasn't a literal breach of this axis) - a -127
-   * fault and a hypothetical +9000 fault render identically, both just
-   * touch the same edge, since the point is to show a breach happened, not
-   * to represent the magnitude of an invalid reading. */
-  private yFor(value: number, range: readonly [number, number], anomalous: boolean): number {
-    const [rangeMin, rangeMax] = range;
-    const usableHeight = PANEL_HEIGHT - PADDING_TOP - PADDING_BOTTOM;
-    let fraction: number;
-
-    if (anomalous) {
-      if (value >= rangeMax) {
-        fraction = 1;
-      } else if (value <= rangeMin) {
-        fraction = 0;
-      } else {
-        fraction = rangeMax - value <= value - rangeMin ? 1 : 0;
-      }
-    } else {
-      fraction = clamp((value - rangeMin) / (rangeMax - rangeMin), 0, 1);
-    }
-
-    return PANEL_HEIGHT - PADDING_BOTTOM - fraction * usableHeight;
-  }
-
-  protected pointsFor(metric: MetricConfig): Point[] {
-    const range = this.rangeFor(metric);
-    return this.readings().map((reading, index) => {
-      const value = reading[metric.key];
-      const anomalous = this.isAnomalousFor(metric, reading);
-      const y = this.yFor(value, range, anomalous);
-      return { x: this.xFor(index), y, anomalous, value };
-    });
-  }
-
-  protected pathFor(metric: MetricConfig): string {
-    const points = this.pointsFor(metric);
-    if (points.length === 0) {
-      return '';
-    }
-    return points
-      .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`)
-      .join(' ');
-  }
-
-  protected tipFor(metric: MetricConfig): Point | null {
-    const points = this.pointsFor(metric);
-    return points.length > 0 ? points[points.length - 1] : null;
-  }
-
-  protected ripplesFor(metric: MetricConfig): RippleInstance[] {
-    return this.ripples().filter((ripple) => ripple.metric === metric.key);
-  }
-
-  protected glowFilterId(metric: MetricConfig): string {
-    return `aqua-glow-${metric.key}`;
-  }
-
-  /** Places each value label on whichever side of the line its neighbors
-   * are NOT on, so the label never sits on top of the line itself: a local
-   * peak (both neighbors lower on screen, i.e. larger y) clears its label
-   * above, a local valley clears below. Ties (flat/monotonic stretches)
-   * fall back to alternating by index, same as before. */
-  protected labelYFor(point: Point, index: number, points: readonly Point[]): number {
-    const prev = points[index - 1];
-    const next = points[index + 1];
-    const neighborY = prev && next ? (prev.y + next.y) / 2 : (prev ?? next ?? point).y;
-
-    const above =
-      neighborY === point.y ? index % 2 === 0 : neighborY > point.y;
-    return point.y + (above ? -11 : 17);
-  }
-
-  /** Anomalous points label in the same amber used for anomalies everywhere
-   * else in the app (numeric readout, anomaly log), so a fault is easy to
-   * spot in the numbers, not just by its pinned position on the line. */
-  protected labelColorFor(metric: MetricConfig, point: Point): string {
-    return point.anomalous ? 'var(--color-anomaly-amber)' : metric.color;
-  }
-
-  /** Instant color swap (no transition) used only under reduced motion, in
-   * place of the ripple animation. */
-  protected tipColorFor(metric: MetricConfig): string {
-    const readings = this.readings();
-    const latest = readings[readings.length - 1];
-    if (this.reducedMotion() && latest && this.isAnomalousFor(metric, latest)) {
-      return 'var(--color-anomaly-amber)';
-    }
-    return metric.color;
-  }
-
-  private nextRippleId = 0;
-  private lastSeenReadingId: number | null = null;
 
   constructor() {
     const destroyRef = inject(DestroyRef);
 
+    effect(() => {
+      const latest = this.readings();
+      if (!this.hasRenderedFirstBatch && latest.length > 0) {
+        // Draw the first batch immediately rather than waiting a full
+        // render interval for the chart to show anything at all.
+        this.hasRenderedFirstBatch = true;
+        this.rendered.set(latest);
+      }
+    });
+
     if (typeof window !== 'undefined') {
-      const media = window.matchMedia('(prefers-reduced-motion: reduce)');
-      const onChange = (event: MediaQueryListEvent) => this.reducedMotion.set(event.matches);
-      media.addEventListener('change', onChange);
-      destroyRef.onDestroy(() => media.removeEventListener('change', onChange));
+      const id = window.setInterval(() => {
+        this.rendered.set(this.readings());
+      }, RENDER_INTERVAL_MS);
+      destroyRef.onDestroy(() => window.clearInterval(id));
+    }
+  }
+
+  protected dataFor(metric: MetricConfig): any[] {
+    return this.dataByMetric.get(metric.key)!();
+  }
+
+  protected layoutFor(metric: MetricConfig): any {
+    return this.layoutByMetric.get(metric.key)!();
+  }
+
+  private buildData(metric: MetricConfig): any[] {
+    const readings = this.rendered();
+    const [min, max] = DISPLAY_RANGE[metric.key];
+
+    const lineX: string[] = [];
+    const lineY: (number | null)[] = [];
+    const anomalyX: string[] = [];
+    const anomalyY: number[] = [];
+    const faultX: string[] = [];
+    const faultY: number[] = [];
+
+    for (const reading of readings) {
+      lineX.push(reading.timestamp);
+
+      // sensor_fault is a whole-row flag (true if ANY field is out of
+      // bounds), so a fault on water_temp alone must not also blank out
+      // air_temp/ph on that same row - only break/mark the line for the
+      // metric(s) actually named in the fault detail.
+      const isFaultedHere = reading.sensor_fault && sensorFaultMetrics(reading).includes(metric.key);
+      if (isFaultedHere) {
+        // A fault's raw value is often physically nonsensical (e.g. -127) and
+        // has no place on this display range, so it breaks the line (null)
+        // rather than plotting a fake position on it. It's still shown, just
+        // as a separate marker below, clamped to the nearest edge.
+        lineY.push(null);
+        const raw = reading[metric.key];
+        faultX.push(reading.timestamp);
+        faultY.push(raw < min ? min : raw > max ? max : raw);
+        continue;
+      }
+
+      lineY.push(reading[metric.key]);
+      if (isAnomalous(reading) && anomalyMetrics(reading).includes(metric.key)) {
+        anomalyX.push(reading.timestamp);
+        anomalyY.push(reading[metric.key]);
+      }
     }
 
-    effect(() => {
-      const readings = this.readings();
-      for (const metric of METRICS) {
-        const visibleValues = readings
-          .filter((reading) => !this.isAnomalousFor(metric, reading))
-          .map((reading) => reading[metric.key]);
+    // Plotly's date-axis autorange gets stuck (stops recalculating on later
+    // react() calls) once a trace array mixes a growing trace with another
+    // trace that stays permanently empty (x: [], y: []) across updates -
+    // confirmed by direct reproduction against Plotly.js in isolation. The
+    // anomaly/fault traces have no points for long stretches of a replay, so
+    // they're only included here once they actually have something to show,
+    // instead of always being present as empty placeholders.
+    const traces: any[] = [
+      {
+        x: lineX,
+        y: lineY,
+        type: 'scatter',
+        mode: 'lines',
+        line: { color: metric.color, width: 1.5, shape: 'linear' },
+        connectgaps: false,
+        hoverinfo: 'x+y',
+        showlegend: false,
+      },
+    ];
 
-        if (visibleValues.length === 0) {
-          continue;
-        }
+    if (anomalyX.length > 0) {
+      traces.push({
+        x: anomalyX,
+        y: anomalyY,
+        type: 'scatter',
+        mode: 'markers',
+        marker: { color: ANOMALY_COLOR, size: 8, symbol: 'circle' },
+        hoverinfo: 'x+y',
+        showlegend: false,
+      });
+    }
 
-        const rangeSignal = this.ranges.get(metric.key)!;
-        const [currentMin, currentMax] = rangeSignal();
-        const outOfRange = visibleValues.some((value) => value < currentMin || value > currentMax);
-        if (!outOfRange) {
-          continue;
-        }
+    if (faultX.length > 0) {
+      traces.push({
+        x: faultX,
+        y: faultY,
+        type: 'scatter',
+        mode: 'markers',
+        marker: { color: FAULT_COLOR, size: 9, symbol: 'x' },
+        hoverinfo: 'x',
+        showlegend: false,
+      });
+    }
 
-        const min = Math.min(...visibleValues);
-        const max = Math.max(...visibleValues);
-        const span = max - min;
-        const padding = Math.max(span * RANGE_PADDING_FRACTION, metric.minPadding);
-        rangeSignal.set([min - padding, max + padding]);
-      }
-    });
-
-    effect(() => {
-      const readings = this.readings();
-      const latest = readings[readings.length - 1];
-      if (!latest || latest.id === this.lastSeenReadingId) {
-        return;
-      }
-      this.lastSeenReadingId = latest.id;
-
-      if (!isAnomalous(latest) || this.reducedMotion()) {
-        return;
-      }
-
-      const targets = anomalyMetrics(latest);
-      const newRipples: RippleInstance[] = [];
-      for (const metric of this.metrics) {
-        if (!targets.includes(metric.key)) {
-          continue;
-        }
-        const tip = this.tipFor(metric);
-        if (tip) {
-          newRipples.push({ id: this.nextRippleId++, metric: metric.key, cx: tip.x, cy: tip.y });
-        }
-      }
-      if (newRipples.length > 0) {
-        this.ripples.update((current) => [...current, ...newRipples]);
-      }
-    });
+    return traces;
   }
 
-  protected colorFor(metric: MetricConfig): string {
-    return metric.color;
-  }
+  private buildLayout(metric: MetricConfig): any {
+    const [min, max] = DISPLAY_RANGE[metric.key];
+    const readings = this.rendered();
 
-  /** CSS `d` property syntax (progressive enhancement over the `d`
-   * attribute): browsers that support animating it get a smooth ease
-   * between points; others just render the attribute with no transition. */
-  protected cssPathFor(metric: MetricConfig): string {
-    const path = this.pathFor(metric);
-    return path ? `path("${path}")` : 'none';
-  }
+    // Plotly's own date-axis autorange stops recalculating across
+    // successive react() calls whenever some trace in the figure stops
+    // changing between updates (confirmed by direct reproduction against
+    // Plotly.js) - which happens routinely here, e.g. a single sensor fault
+    // that never repeats leaves the fault marker trace fixed forever after.
+    // Computing the x range ourselves from the current readings' own
+    // timestamps every time sidesteps that entirely, the same way the fixed
+    // y range already does.
+    const xRange =
+      readings.length > 0
+        ? [readings[0].timestamp, readings[readings.length - 1].timestamp]
+        : undefined;
 
-  protected removeRipple(id: number): void {
-    this.ripples.update((current) => current.filter((ripple) => ripple.id !== id));
+    return {
+      autosize: true,
+      margin: { l: 44, r: 12, t: 8, b: 28 },
+      paper_bgcolor: 'transparent',
+      plot_bgcolor: 'transparent',
+      showlegend: false,
+      transition: { duration: 0 },
+      xaxis: {
+        type: 'date',
+        range: xRange,
+        showgrid: true,
+        gridcolor: GRID_COLOR,
+        tickfont: { color: TICK_COLOR, size: 10 },
+        zeroline: false,
+        fixedrange: true,
+      },
+      yaxis: {
+        range: [min, max],
+        showgrid: true,
+        gridcolor: GRID_COLOR,
+        tickfont: { color: TICK_COLOR, size: 10 },
+        zeroline: false,
+        fixedrange: true,
+      },
+    };
   }
-
-  protected readonly rippleLifetimeMs = RIPPLE_LIFETIME_MS;
 }

@@ -1,9 +1,11 @@
 <div class="readout">
   @for (metric of metrics; track metric.key) {
-    <div class="metric" [class.anomalous]="isAnomalousFor(metric)">
-      <span class="value" [style.color]="isAnomalousFor(metric) ? null : metric.color">{{
-        valueFor(metric)
-      }}</span>
+    <div class="metric" [class.anomalous]="isAnomalousFor(metric)" [class.fault]="isFaultFor(metric)">
+      <span
+        class="value"
+        [style.color]="isAnomalousFor(metric) || isFaultFor(metric) ? null : metric.color"
+        >{{ valueFor(metric) }}</span
+      >
       <span class="label">{{ metric.label }}</span>
     </div>
   }
@@ -11,5 +13,10 @@
   <div class="metric anomaly-count" [class.active]="anomalyCount() > 0">
     <span class="value">{{ anomalyCount() }}</span>
     <span class="label">anomalies</span>
+  </div>
+
+  <div class="metric fault-count" [class.active]="sensorFaultCount() > 0">
+    <span class="value">{{ sensorFaultCount() }}</span>
+    <span class="label">sensor faults</span>
   </div>
 </div>

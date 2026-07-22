@@ -1,10 +1,15 @@
+import { importProvidersFrom } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { PlotlyModule } from 'angular-plotly.js';
+import * as PlotlyJS from 'plotly.js-basic-dist-min';
+
 import { App } from './app';
 
 describe('App', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [App],
+      providers: [importProvidersFrom(PlotlyModule.forRoot(PlotlyJS))],
     }).compileComponents();
   });
 
